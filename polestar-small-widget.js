@@ -1,8 +1,10 @@
+// Variables used by Scriptable.
+// These must be at the very top of the file. Do not edit.
 // icon-color: green; icon-glyph: battery-half;
 
 /**
  * This widget has been developed by Niklas Vieth.
- * Installation and configuration details can be found at https://github.com/niklasvieth/polestar-ios-small-widget
+ * Installation and configuration details can be found at https://github.com/niklasvieth/polestar-ios-universal-widget
  */
 
 // Mandatory Config
@@ -15,7 +17,14 @@ let VEHICLE_NAME;
 // let VEHICLE_NAME = "Polestar Custom Name";
 
 // Additional optional configuration
-const IMAGE_ANGLE = "5"; // Possible values 0,1,2,3,4,5
+const IMAGE_ANGLES = { // for each widget size, possible values 0,1,2,3,4,5
+  small:                "5", 
+  medium:               "0",
+  large:                "0",
+  accessoryCircular:    "0",
+  accessoryRectangular: "0",
+  accessoryInline:      "0"
+};
 const RANGE_IN_MILES = false; // true
 const LAST_SEEN_RELATIVE_DATE = false; // true
 const MIN_SOC_GREEN = 60;
@@ -24,7 +33,8 @@ const MIN_SOC_ORANGE = 30;
 const DARK_MODE = Device.isUsingDarkAppearance(); // or set manually to (true or false)
 const DARK_BG_COLOR = "000000";
 const LIGHT_BG_COLOR = "FFFFFF";
-
+const DEFAULT_URL = "polestarapp:///";
+const DEFAULT_WIDGETSIZE = "medium";
 // API config
 const POLESTAR_BASE_URL = "https://pc-api.polestar.com/eu-north-1";
 const POLESTAR_API_URL_V2 = `${POLESTAR_BASE_URL}/mystar-v2`;
@@ -56,17 +66,19 @@ const [batteryData, odometerData] = await Promise.all([
 
 // You can run the script in the app to preview the widget or you can go to the Home Screen, add a new Scriptable widget and configure the widget to run this script.
 // You can also try creating a shortcut that runs this script. Running the shortcut will show widget.
+const widgetSize = config.widgetFamily || DEFAULT_WIDGETSIZE;
 const widget = await createPolestarWidget(
   batteryData,
   odometerData,
-  vehicleData
+  vehicleData,
+  widgetSize
 );
 if (config.runsInWidget) {
   // The script runs inside a widget, so we pass our instance of ListWidget to be shown inside the widget on the Home Screen.
   Script.setWidget(widget);
 } else {
   // The script runs inside the app, so we preview the widget.
-  widget.presentSmall();
+  widget[`present${widgetSize.charAt(0).toUpperCase() + widgetSize.slice(1)}`]();
 }
 
 // Calling Script.complete() signals to Scriptable that the script have finished running.
@@ -74,7 +86,7 @@ if (config.runsInWidget) {
 Script.complete();
 
 // Create polestar widget
-async function createPolestarWidget(batteryData, odometerData, vehicle) {
+async function createPolestarWidget(batteryData, odometerData, vehicle, size) {
   const batteryPercent = parseInt(batteryData.batteryChargeLevelPercentage);
   const isCharging = batteryData.chargingStatus === "CHARGING_STATUS_CHARGING";
   const remainingChargingTime = batteryData.estimatedChargingTimeToFullMinutes;
@@ -89,21 +101,21 @@ async function createPolestarWidget(batteryData, odometerData, vehicle) {
   const chargingKw = parseInt(chargingWatts / 1000);
 
   // Prepare image
-  if (!vehicle.content.images.studio.angles.includes(IMAGE_ANGLE)) {
+  if (!vehicle.content.images.studio.angles.includes(IMAGE_ANGLES[size])) {
     throw new Error(
-      `IMG_ANGLE ${IMAGE_ANGLE} is not in ${vehicle.content.images.studio.angles}`
+      `IMG_ANGLE ${size} -> ${IMAGE_ANGLES[size]} is not in ${vehicle.content.images.studio.angles}`
     );
   }
   const imgUrl = `${
     vehicle.content.images.studio.url
-  }&angle=${IMAGE_ANGLE}&bg=${
+  }&angle=${IMAGE_ANGLES[size]}&bg=${
     DARK_MODE ? DARK_BG_COLOR : LIGHT_BG_COLOR
   }&width=600`;
 
   const appIcon = await loadImage(POLESTAR_ICON);
   const title = VEHICLE_NAME ?? vehicle.content.model.name;
   const widget = new ListWidget();
-  widget.url = "polestar-explore://";
+  widget.url = DEFAULT_URL; // originally: polestar-explore://
   const mainStack = widget.addStack();
   mainStack.layoutVertically();
 
@@ -112,6 +124,8 @@ async function createPolestarWidget(batteryData, odometerData, vehicle) {
     ? new Color(DARK_BG_COLOR)
     : new Color(LIGHT_BG_COLOR);
 
+// ########################################### SMALL LAYOUT ######################################
+async function createSmallWidgetLayout() {
   // Show app icon and title
   mainStack.addSpacer();
   const titleStack = mainStack.addStack();
@@ -205,7 +219,231 @@ async function createPolestarWidget(batteryData, odometerData, vehicle) {
   lastSeenElement.textOpacity = 0.5;
   lastSeenElement.textColor = DARK_MODE ? Color.white() : Color.black();
   lastSeenElement.minimumScaleFactor = 0.7;
+  }
 
+  // ########################################### MEDIUM LAYOUT ######################################
+  async function createMediumWidgetLayout() {
+    // Show app icon and title
+    mainStack.addSpacer();
+    const titleStack = mainStack.addStack();
+    const titleElement = titleStack.addText(title);
+    titleElement.textColor = DARK_MODE ? Color.white() : Color.black();
+    titleElement.textOpacity = 0.7;
+    titleElement.font = Font.mediumSystemFont(18);
+    titleStack.addSpacer();
+    const appIconElement = titleStack.addImage(appIcon);
+    appIconElement.imageSize = new Size(30, 30);
+    appIconElement.cornerRadius = 4;
+    mainStack.addSpacer();
+
+    // Center Stack
+    const contentStack = mainStack.addStack();
+    const carImage = await loadImage(imgUrl);
+    const carImageElement = contentStack.addImage(carImage);
+    carImageElement.imageSize = new Size(150, 90);
+    contentStack.addSpacer();
+
+    // Battery Info
+    const batteryInfoStack = contentStack.addStack();
+    batteryInfoStack.layoutVertically();
+    batteryInfoStack.addSpacer();
+
+    // Range
+    const rangeStack = batteryInfoStack.addStack();
+    rangeStack.addSpacer();
+    const rangeText = RANGE_IN_MILES ? `${rangeMiles} mi` : `${rangeKm} km`;
+    const rangeElement = rangeStack.addText(rangeText);
+    rangeElement.font = Font.mediumSystemFont(20);
+    rangeElement.textColor = DARK_MODE ? Color.white() : Color.black();
+    rangeElement.rightAlignText();
+    batteryInfoStack.addSpacer();
+
+    // Battery Percent Value
+    const batteryPercentStack = batteryInfoStack.addStack();
+    batteryPercentStack.addSpacer();
+    batteryPercentStack.centerAlignContent();
+    const { batteryIcon, batteryIconColor } = getBatteryIcon(
+      batteryPercent,
+      isConnected,
+      isCharging,
+      isChargingDone
+    );
+    const batterySymbolElement = batteryPercentStack.addImage(batteryIcon.image);
+    batterySymbolElement.imageSize = new Size(25, 25);
+    batterySymbolElement.tintColor = batteryIconColor;
+    batteryPercentStack.addSpacer(8);
+
+    const batteryPercentText = batteryPercentStack.addText(`${batteryPercent} %`);
+    batteryPercentText.textColor = getBatteryPercentColor(batteryPercent);
+    batteryPercentText.font = Font.boldSystemFont(20);
+
+    if (isCharging) {
+      const batteryChargingTimeStack = batteryInfoStack.addStack();
+      batteryChargingTimeStack.addSpacer();
+      const remainingChargeTimeHours = parseInt(remainingChargingTime / 60);
+      const remainingChargeTimeMinsRemainder = remainingChargingTime % 60;
+      const chargingTimeElement = batteryChargingTimeStack.addText(
+        `${chargingKw} kW  -  ${remainingChargeTimeHours}h ${remainingChargeTimeMinsRemainder}m`
+      );
+      chargingTimeElement.font = Font.mediumSystemFont(14);
+      chargingTimeElement.textOpacity = 0.9;
+      chargingTimeElement.textColor = DARK_MODE ? Color.white() : Color.black();
+      chargingTimeElement.rightAlignText();
+    }
+    batteryInfoStack.addSpacer();
+
+    // Footer
+    const footerStack = mainStack.addStack();
+
+    // Add odometer
+    const odometerText = RANGE_IN_MILES
+      ? `${parseInt(odometerData.odometerMeters / 1609.344).toLocaleString()} mi`
+      : `${parseInt(odometerData.odometerMeters / 1000).toLocaleString()} km`;
+    const odometerElement = footerStack.addText(odometerText);
+    odometerElement.font = Font.mediumSystemFont(10);
+    odometerElement.textColor = DARK_MODE ? Color.white() : Color.black();
+    odometerElement.textOpacity = 0.5;
+    odometerElement.minimumScaleFactor = 0.5;
+    odometerElement.leftAlignText();
+    footerStack.addSpacer();
+
+    // Add last seen indicator
+    const lastSeenDate = new Date(batteryData.eventUpdatedTimestamp.iso);
+    const lastSeenText = lastSeenDate.toLocaleString();
+    let lastSeenElement;
+    if (LAST_SEEN_RELATIVE_DATE) {
+      lastSeenElement = footerStack.addDate(lastSeenDate);
+      lastSeenElement.applyRelativeStyle();
+    } else {
+      lastSeenElement = footerStack.addText(lastSeenText);
+    }
+    lastSeenElement.font = Font.mediumSystemFont(10);
+    lastSeenElement.textOpacity = 0.5;
+    lastSeenElement.textColor = DARK_MODE ? Color.white() : Color.black();
+    lastSeenElement.minimumScaleFactor = 0.5;
+    lastSeenElement.rightAlignText();
+
+    mainStack.addSpacer();
+  }
+
+// ########################################### CIRCULAR LAYOUT ######################################
+async function createCircularWidgetLayout() {
+  const progressStack = await drawArc(widget, batteryPercent, isCharging);
+
+  const batteryInfoStack = progressStack.addStack();
+  batteryInfoStack.layoutVertically();
+  
+  // Polestar Icon
+  const imageStack = batteryInfoStack.addStack();
+  imageStack.addSpacer();
+  
+  if (isCharging || isChargingDone) {
+    const chargingIcon = isCharging
+      ? SFSymbol.named("bolt.fill")
+      : SFSymbol.named("checkmark.circle");
+    const chargingSymbolElement = imageStack.addImage(chargingIcon.image);
+    chargingSymbolElement.tintColor = Color.green();
+    chargingSymbolElement.imageSize = new Size(15, 15);
+  } else if (isConnected) {
+    const chargingIcon = SFSymbol.named("bolt.slash.fill");
+    const chargingSymbolElement = imageStack.addImage(chargingIcon.image);
+    chargingSymbolElement.tintColor = Color.red();
+    chargingSymbolElement.imageSize = new Size(15, 15);
+  } else {
+    const appIcon = await loadImage(POLESTAR_ICON);
+    const icon = imageStack.addImage(appIcon);
+    icon.imageSize = new Size(13, 13);
+    icon.cornerRadius = 4;
+  }
+  imageStack.addSpacer();
+  
+  // Percent Text
+  batteryInfoStack.addSpacer(2);
+  const textStack = batteryInfoStack.addStack();
+  textStack.centerAlignContent();
+  textStack.addSpacer();
+  textStack.addText(`${batteryPercent}%`);
+  textStack.addSpacer();
+}
+
+/*****************************
+ * Draw battery percent circle
+ * Forked and adapted from https://gist.githubusercontent.com/Sillium/4210779bc2d759b494fa60ba4f464bd8/raw/9e172bac0513cc3cf0e70f3399e49d10f5d0589c/ProgressCircleService.js
+ *****************************/
+async function drawArc(on, percent) {
+  const canvSize = 200;
+  const canvas = new DrawContext();
+  canvas.opaque = false;
+  const canvWidth = 18; // circle thickness
+  const canvRadius = 80; // circle radius
+  canvas.size = new Size(canvSize, canvSize);
+  canvas.respectScreenScale = true;
+
+  const deg = Math.floor(percent * 3.6);
+
+  let ctr = new Point(canvSize / 2, canvSize / 2);
+  const bgx = ctr.x - canvRadius;
+  const bgy = ctr.y - canvRadius;
+  const bgd = 2 * canvRadius;
+  const bgr = new Rect(bgx, bgy, bgd, bgd);
+
+  canvas.opaque = false;
+
+  canvas.setFillColor(Color.white());
+  canvas.setStrokeColor(new Color("#333333"));
+  canvas.setLineWidth(canvWidth);
+  canvas.strokeEllipse(bgr);
+
+  for (let t = 0; t < deg; t++) {
+    const rect_x = ctr.x + canvRadius * sinDeg(t) - canvWidth / 2;
+    const rect_y = ctr.y - canvRadius * cosDeg(t) - canvWidth / 2;
+    const rect_r = new Rect(rect_x, rect_y, canvWidth, canvWidth);
+    canvas.fillEllipse(rect_r);
+  }
+
+  let stack = on.addStack();
+  stack.size = new Size(65, 65);
+  stack.backgroundImage = canvas.getImage();
+  let padding = 0;
+  stack.setPadding(padding, padding, padding, padding);
+  stack.centerAlignContent();
+
+  return stack;
+}
+
+function sinDeg(deg) {
+  return Math.sin((deg * Math.PI) / 180);
+}
+
+function cosDeg(deg) {
+  return Math.cos((deg * Math.PI) / 180);
+}
+
+// ########################################### select LAYOUT ######################################
+  switch(size) {
+    case 'accessoryCircular':                // 1 x 1 (iPhone, Apple Watch)
+      await createCircularWidgetLayout();
+      break;
+    case 'small':                            // 2 x 2 (iPhone, iPad)
+      await createSmallWidgetLayout();
+      break;
+    case 'medium':                           // 4 x 2 (iPhone, iPad)
+      await createMediumWidgetLayout();
+      break;
+    case 'accessoryRectangular':             // iPad: Sperrbildschirm Querformat klein
+      await createMediumWidgetLayout();
+      break;
+    case 'large':                          // 4 x 4 (iPad)
+       await createMediumWidgetLayout();
+      break;
+    case 'accessoryInline':                // Einzeiliger Text auf dem Sperrbildschirm (iPhone, iPad)
+      await createMediumWidgetLayout();
+      break;
+    default:
+      throw new Error(widgetSize + ": Widget-Size unsupported");
+      break;
+  }
+  
   return widget;
 }
 
@@ -469,3 +707,5 @@ function getBatteryIcon(
   }
   return { batteryIcon: icon, batteryIconColor: iconColor };
 }
+
+// ***** EOF *****
